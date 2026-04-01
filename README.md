@@ -14,23 +14,9 @@
 
 ---
 
-```
-$ dxos run "find and fix the null pointer exception in src/api/handler.rs"
-
-dxos v0.1.0 — model: claude-sonnet-4 — mode: workspace-write
-
-I found the issue. In `handler.rs:47`, the `user` variable is unwrapped
-without checking for None when the session token is expired...
-
-[reads src/api/handler.rs]
-[edits src/api/handler.rs — adds Option check]
-[runs cargo test]
-
-Fixed. The handler now returns 401 instead of panicking on expired sessions.
-All 23 tests pass.
-
---- 6 tool calls | 3 iterations | 4,218 tokens ---
-```
+<p align="center">
+  <img src="assets/demo.gif" alt="DXOS demo — fixing a null pointer in 4 seconds" width="800">
+</p>
 
 ## Why DXOS
 
