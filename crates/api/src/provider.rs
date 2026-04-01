@@ -52,8 +52,8 @@ impl ProviderClient {
             if output.status.success() {
                 let list = String::from_utf8_lossy(&output.stdout);
                 // Prefer qwen3, then deepseek-r1, then llama, then mistral
-                // Order: models with good tool-use support first
-                let preferred = ["qwen3", "llama3", "mistral", "gemma"];
+                // Order: best coding models first
+                let preferred = ["qwen2.5-coder", "qwen3-coder", "devstral", "qwen3", "llama3", "mistral"];
 
                 if let Some(hint) = model_hint {
                     // User specified a model — check if it's available locally

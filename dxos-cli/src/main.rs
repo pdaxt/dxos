@@ -1,7 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+mod display;
 mod models;
+mod prompt;
 mod repl;
 
 #[derive(Parser)]
@@ -168,7 +170,7 @@ fn cmd_run(prompt: String, model: Option<String>, permission: String, max_turns:
     let tools = registry.to_api_definitions();
 
     // Build system prompt
-    let system_prompt = build_system_prompt(&cwd);
+    let system_prompt = prompt::build_system_prompt(&cwd);
 
     // Create runtime
     let mut runtime = dxos_harness::ConversationRuntime::new(
@@ -243,21 +245,3 @@ fn cmd_config() -> Result<()> {
     Ok(())
 }
 
-fn build_system_prompt(cwd: &std::path::Path) -> Vec<String> {
-    let mut parts = vec![
-        "You are DXOS, an AI coding agent. You help developers by reading, writing, and editing code.".to_string(),
-        format!("Working directory: {}", cwd.display()),
-    ];
-
-    // Load CLAUDE.md / DXOS.md if present
-    for name in &["CLAUDE.md", "DXOS.md", ".dxos/instructions.md"] {
-        let path = cwd.join(name);
-        if path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                parts.push(format!("Project instructions from {name}:\n{content}"));
-            }
-        }
-    }
-
-    parts
-}

@@ -24,6 +24,31 @@ pub trait ApiClient {
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>>;
 }
 
+/// Runtime events emitted during execution for UI display.
+pub enum RuntimeEvent<'a> {
+    /// LLM is being called (show spinner)
+    Thinking,
+    /// Text output from the model
+    Text(&'a str),
+    /// Tool is about to be called
+    ToolCall { name: &'a str, input: &'a str },
+    /// Tool finished
+    ToolResult { name: &'a str, success: bool },
+    /// Turn complete
+    Done,
+}
+
+/// Callback for runtime events — the CLI implements this to render the UI.
+pub trait RuntimeListener {
+    fn on_event(&mut self, event: RuntimeEvent<'_>);
+}
+
+/// No-op listener for when no UI is needed.
+pub struct SilentListener;
+impl RuntimeListener for SilentListener {
+    fn on_event(&mut self, _event: RuntimeEvent<'_>) {}
+}
+
 #[derive(Debug, Clone)]
 pub struct TurnSummary {
     pub text: String,
@@ -70,10 +95,20 @@ impl<C: ApiClient> ConversationRuntime<C> {
         self
     }
 
+    /// Run a turn without UI events (backwards compatible).
     pub fn run_turn(
         &mut self,
         user_input: impl Into<String>,
         _prompter: Option<&mut dyn PermissionPrompter>,
+    ) -> Result<TurnSummary> {
+        self.run_turn_with_listener(user_input, &mut SilentListener)
+    }
+
+    /// Run a turn with a listener for UI events.
+    pub fn run_turn_with_listener(
+        &mut self,
+        user_input: impl Into<String>,
+        listener: &mut dyn RuntimeListener,
     ) -> Result<TurnSummary> {
         self.session
             .messages
@@ -94,6 +129,9 @@ impl<C: ApiClient> ConversationRuntime<C> {
                 return Err(DxosError::TurnLimitExceeded { iterations });
             }
 
+            // Notify UI: thinking
+            listener.on_event(RuntimeEvent::Thinking);
+
             let request = ApiRequest {
                 system_prompt: self.system_prompt.clone(),
                 messages: self.session.messages.clone(),
@@ -110,11 +148,16 @@ impl<C: ApiClient> ConversationRuntime<C> {
             for event in events {
                 match event {
                     AssistantEvent::TextDelta(text) => {
+                        listener.on_event(RuntimeEvent::Text(&text));
                         text_output.push_str(&text);
                         blocks.push(ContentBlock::Text { text });
                     }
                     AssistantEvent::ToolUse { id, name, input } => {
                         tool_calls += 1;
+                        listener.on_event(RuntimeEvent::ToolCall {
+                            name: &name,
+                            input: &input,
+                        });
                         pending_tools.push((id.clone(), name.clone(), input.clone()));
                         blocks.push(ContentBlock::ToolUse { id, name, input });
                     }
@@ -143,23 +186,39 @@ impl<C: ApiClient> ConversationRuntime<C> {
                     PermissionOutcome::Allow => {
                         match dxos_tools::execute_tool(&tool_name, &input, &self.cwd) {
                             Ok(output) => {
+                                listener.on_event(RuntimeEvent::ToolResult {
+                                    name: &tool_name,
+                                    success: true,
+                                });
                                 ConversationMessage::tool_result(tool_id, tool_name, output, false)
                             }
-                            Err(e) => ConversationMessage::tool_result(
-                                tool_id,
-                                tool_name,
-                                e.to_string(),
-                                true,
-                            ),
+                            Err(e) => {
+                                listener.on_event(RuntimeEvent::ToolResult {
+                                    name: &tool_name,
+                                    success: false,
+                                });
+                                ConversationMessage::tool_result(
+                                    tool_id,
+                                    tool_name,
+                                    e.to_string(),
+                                    true,
+                                )
+                            }
                         }
                     }
                     PermissionOutcome::Deny { reason } => {
+                        listener.on_event(RuntimeEvent::ToolResult {
+                            name: &tool_name,
+                            success: false,
+                        });
                         ConversationMessage::tool_result(tool_id, tool_name, reason, true)
                     }
                 };
                 self.session.messages.push(result_msg);
             }
         }
+
+        listener.on_event(RuntimeEvent::Done);
 
         Ok(TurnSummary {
             text: text_output,
