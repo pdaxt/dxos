@@ -5,6 +5,7 @@ mod file_write;
 mod glob_search;
 mod grep_search;
 mod registry;
+mod web_fetch;
 #[cfg(test)]
 mod tests;
 
@@ -15,6 +16,7 @@ pub use file_write::{write_file, WriteInput, WriteOutput};
 pub use glob_search::{glob_files, GlobInput, GlobOutput};
 pub use grep_search::{grep_content, GrepInput, GrepOutput};
 pub use registry::{ToolRegistry, ToolSpec};
+pub use web_fetch::{web_fetch, WebFetchInput, WebFetchOutput};
 
 use dxos_core::{DxosError, Result};
 
@@ -49,6 +51,11 @@ pub fn execute_tool(name: &str, input: &str, cwd: &std::path::Path) -> Result<St
         "grep" | "Grep" => {
             let input: GrepInput = serde_json::from_str(input)?;
             let output = grep_content(input, cwd)?;
+            Ok(serde_json::to_string(&output)?)
+        }
+        "web_fetch" | "WebFetch" => {
+            let input: WebFetchInput = serde_json::from_str(input)?;
+            let output = web_fetch(input)?;
             Ok(serde_json::to_string(&output)?)
         }
         _ => Err(DxosError::Tool {

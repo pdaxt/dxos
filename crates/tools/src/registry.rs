@@ -149,5 +149,18 @@ fn builtin_tools() -> Vec<ToolSpec> {
             }),
             permission: PermissionLevel::WorkspaceWrite,
         },
+        ToolSpec {
+            name: "web_fetch",
+            description: "Fetch content from a URL. Returns text content with HTML tags stripped.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "The URL to fetch" },
+                    "max_length": { "type": "integer", "description": "Max characters to return (default: 50000)" }
+                },
+                "required": ["url"]
+            }),
+            permission: PermissionLevel::ReadOnly,
+        },
     ]
 }
