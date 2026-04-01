@@ -1,8 +1,9 @@
-use std::io::{self, BufRead, Write};
 use std::time::Instant;
 
 use anyhow::Result;
 use dxos_harness::{RuntimeEvent, RuntimeListener};
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
 
 use crate::display;
 use crate::models;
@@ -94,21 +95,30 @@ pub fn run_repl(model: Option<String>) -> Result<()> {
     eprintln!("  \x1b[2m/help for commands, /quit to exit\x1b[0m");
     eprintln!();
 
-    let stdin = io::stdin();
-    let mut lines = stdin.lock().lines();
+    // Readline with history
+    let mut rl = DefaultEditor::new()?;
+    let history_path = dirs::data_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("dxos")
+        .join("history.txt");
+    if let Some(parent) = history_path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let _ = rl.load_history(&history_path);
+
     let mut turn_count: usize = 0;
 
     loop {
-        eprint!("\x1b[1;32m❯\x1b[0m ");
-        io::stderr().flush()?;
-
-        let line = match lines.next() {
-            Some(Ok(line)) => line,
-            Some(Err(e)) => {
+        let line = match rl.readline("\x1b[1;32m❯\x1b[0m ") {
+            Ok(line) => line,
+            Err(ReadlineError::Interrupted | ReadlineError::Eof) => {
+                eprintln!("\x1b[2mbye.\x1b[0m");
+                break;
+            }
+            Err(e) => {
                 eprintln!("Input error: {e}");
                 break;
             }
-            None => break,
         };
 
         let input = line.trim().to_string();
@@ -116,10 +126,13 @@ pub fn run_repl(model: Option<String>) -> Result<()> {
             continue;
         }
 
+        rl.add_history_entry(&input).ok();
+
         // Slash commands
         if input.starts_with('/') {
             match input.as_str() {
                 "/quit" | "/exit" | "/q" => {
+                    let _ = rl.save_history(&history_path);
                     eprintln!("\x1b[2mbye.\x1b[0m");
                     break;
                 }
