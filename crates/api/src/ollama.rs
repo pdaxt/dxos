@@ -212,22 +212,24 @@ impl ApiClient for OllamaClient {
             return Err(dxos_core::DxosError::Api(format!("Ollama HTTP {status}: {text}")));
         }
 
-        // Parse SSE stream line by line
+        // TRUE streaming: read response body line-by-line as chunks arrive
         let mut events = Vec::new();
         let mut full_content = String::new();
         let mut tool_calls_json: Vec<Value> = Vec::new();
         let mut usage_event = None;
 
-        let text = response.text().map_err(|e: reqwest::Error| {
-            dxos_core::DxosError::Api(e.to_string())
-        })?;
-
-        for line in text.lines() {
-            let line = line.trim();
+        let reader = std::io::BufReader::new(response);
+        use std::io::BufRead;
+        for line_result in reader.lines() {
+            let line = match line_result {
+                Ok(l) => l,
+                Err(_) => break,
+            };
+            let line = line.trim().to_string();
             if line.is_empty() || line == "data: [DONE]" {
                 continue;
             }
-            let json_str = line.strip_prefix("data: ").unwrap_or(line);
+            let json_str = line.strip_prefix("data: ").unwrap_or(&line);
             let chunk: Value = match serde_json::from_str(json_str) {
                 Ok(v) => v,
                 Err(_) => continue,
@@ -238,8 +240,8 @@ impl ApiClient for OllamaClient {
                 for choice in choices {
                     let delta = &choice["delta"];
 
-                    // Text content — stream it live
-                    if let Some(content) = delta["content"].as_str() {
+                    // Stream incremental text tokens only from delta field
+                    if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
                         if !content.is_empty() {
                             on_token(content);
                             full_content.push_str(content);
@@ -311,9 +313,10 @@ impl ApiClient for OllamaClient {
             if let Some(extracted) = extract_tool_call_from_text(&full_content) {
                 events.push(extracted);
             } else {
+                // Text already streamed via on_token — add to events for conversation history only
                 events.push(AssistantEvent::TextDelta(full_content));
             }
-        } else if !full_content.is_empty() {
+        } else if has_tool_calls && !full_content.is_empty() {
             events.push(AssistantEvent::TextDelta(full_content));
         }
 

@@ -193,11 +193,8 @@ pub fn run_repl(model: Option<String>) -> Result<()> {
             Ok(summary) => {
                 let elapsed = start.elapsed().as_secs_f64();
 
-                if listener.has_printed_text {
-                    // Text was already streamed live — just end the line
-                    eprintln!();
-                } else {
-                    // No streaming happened (non-streaming provider) — print now
+                if !summary.was_streamed && !summary.text.is_empty() {
+                    // Non-streaming provider — print the response now
                     eprintln!();
                     let formatted = display::format_output(&summary.text);
                     for line in formatted.lines() {

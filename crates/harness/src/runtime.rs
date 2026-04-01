@@ -71,6 +71,8 @@ pub struct TurnSummary {
     pub tool_calls: usize,
     pub iterations: usize,
     pub usage: TokenUsage,
+    /// True if text was already streamed to stderr during generation.
+    pub was_streamed: bool,
 }
 
 pub struct ConversationRuntime<C: ApiClient> {
@@ -138,6 +140,7 @@ impl<C: ApiClient> ConversationRuntime<C> {
         let mut text_output = String::new();
         let mut tool_calls = 0;
         let mut iterations = 0;
+        let mut any_streamed = false;
 
         loop {
             iterations += 1;
@@ -187,7 +190,10 @@ impl<C: ApiClient> ConversationRuntime<C> {
             // Stream with live token display
             let spinner_flag2 = spinner_running.clone();
             let mut streamed = false;
+            let mut streamed_len = 0usize;
             let events = self.api_client.stream_with_callback(request, &mut |text| {
+                any_streamed = true;
+                streamed_len += text.len();
                 if !streamed {
                     // Stop spinner, clear line
                     spinner_flag2.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -206,7 +212,7 @@ impl<C: ApiClient> ConversationRuntime<C> {
             if streamed {
                 eprintln!();
             } else {
-                eprint!("\r\x1b[K"); // Clear spinner if no streaming happened
+                eprint!("\r\x1b[K");
             }
 
             let events = events?;
@@ -296,6 +302,7 @@ impl<C: ApiClient> ConversationRuntime<C> {
             tool_calls,
             iterations,
             usage: self.cumulative_usage,
+            was_streamed: any_streamed,
         })
     }
 }
