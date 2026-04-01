@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+mod models;
+
 #[derive(Parser)]
 #[command(
     name = "dxos",
@@ -20,7 +22,7 @@ enum Commands {
         /// The task or question for the agent
         prompt: Vec<String>,
 
-        /// Model to use (default: claude-sonnet-4-20250514)
+        /// Model to use (e.g. qwen3:8b, llama3.1, claude-sonnet-4)
         #[arg(short, long)]
         model: Option<String>,
 
@@ -32,6 +34,9 @@ enum Commands {
         #[arg(long, default_value = "16")]
         max_turns: usize,
     },
+
+    /// Download and configure a local model
+    Setup,
 
     /// Spawn a fleet of agents on isolated worktrees
     Fleet {
@@ -85,6 +90,8 @@ fn main() -> Result<()> {
             max_turns,
         } => cmd_run(prompt.join(" "), model, permission, max_turns),
 
+        Commands::Setup => cmd_setup(),
+
         Commands::Fleet { prompt, agents } => {
             eprintln!("Fleet mode coming in v0.2 — {agents} agents on isolated worktrees");
             eprintln!("Mission: {}", prompt.join(" "));
@@ -120,7 +127,15 @@ fn cmd_run(prompt: String, model: Option<String>, permission: String, max_turns:
     let cwd = std::env::current_dir()?;
 
     // Auto-detect best available model, or use explicit --model
-    let (client, model_name) = dxos_api::ProviderClient::auto_detect(model.as_deref())?;
+    // If nothing is available, trigger interactive setup
+    let (client, model_name) = match dxos_api::ProviderClient::auto_detect(model.as_deref()) {
+        Ok(result) => result,
+        Err(_) => {
+            eprintln!("No model available. Let's set one up.\n");
+            let model_id = models::interactive_setup()?;
+            dxos_api::ProviderClient::auto_detect(Some(&model_id))?
+        }
+    };
 
     // Build permission policy
     let mode = match permission.as_str() {
@@ -175,6 +190,16 @@ fn cmd_run(prompt: String, model: Option<String>, permission: String, max_turns:
     Ok(())
 }
 
+fn cmd_setup() -> Result<()> {
+    let model = models::interactive_setup()?;
+    eprintln!();
+    eprintln!("  Ready! Try:");
+    eprintln!("    dxos run \"explain this codebase\"");
+    eprintln!();
+    eprintln!("  Using model: {model}");
+    Ok(())
+}
+
 fn cmd_init() -> Result<()> {
     let cwd = std::env::current_dir()?;
     let dxos_dir = cwd.join(".dxos");
@@ -189,8 +214,8 @@ fn cmd_init() -> Result<()> {
         dxos_dir.join("config.toml"),
         r#"# DXOS project configuration
 [provider]
-provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+provider = "local"
+model = "qwen3:8b"
 
 [settings]
 max_turns = 16
