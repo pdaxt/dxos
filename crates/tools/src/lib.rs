@@ -5,6 +5,8 @@ mod file_write;
 mod glob_search;
 mod grep_search;
 mod registry;
+#[cfg(test)]
+mod tests;
 
 pub use bash::{execute_bash, BashInput, BashOutput};
 pub use edit::{edit_file, EditInput, EditOutput};
