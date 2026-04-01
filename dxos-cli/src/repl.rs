@@ -33,11 +33,12 @@ impl RuntimeListener for CliListener {
             RuntimeEvent::Text(text) => {
                 if !self.has_printed_text {
                     display::clear_spinner();
+                    eprint!("  ");
                     self.has_printed_text = true;
                 }
-                // Text will be printed after the turn completes for now
-                // (streaming will come with SSE support)
-                let _ = text;
+                // Print each token as it arrives — live streaming
+                eprint!("{text}");
+                std::io::Write::flush(&mut std::io::stderr()).ok();
             }
             RuntimeEvent::ToolCall { name, input } => {
                 display::clear_spinner();
@@ -192,11 +193,16 @@ pub fn run_repl(model: Option<String>) -> Result<()> {
             Ok(summary) => {
                 let elapsed = start.elapsed().as_secs_f64();
 
-                // Print response with border
-                eprintln!();
-                let formatted = display::format_output(&summary.text);
-                for line in formatted.lines() {
-                    println!("  {line}");
+                if listener.has_printed_text {
+                    // Text was already streamed live — just end the line
+                    eprintln!();
+                } else {
+                    // No streaming happened (non-streaming provider) — print now
+                    eprintln!();
+                    let formatted = display::format_output(&summary.text);
+                    for line in formatted.lines() {
+                        println!("  {line}");
+                    }
                 }
 
                 display::print_summary(

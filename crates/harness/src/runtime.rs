@@ -22,6 +22,22 @@ pub enum AssistantEvent {
 
 pub trait ApiClient {
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>>;
+
+    /// Stream with a callback for each token as it arrives.
+    /// Default implementation delegates to `stream()` (no live output).
+    fn stream_with_callback(
+        &mut self,
+        request: ApiRequest,
+        on_token: &mut dyn FnMut(&str),
+    ) -> Result<Vec<AssistantEvent>> {
+        let events = self.stream(request)?;
+        for event in &events {
+            if let AssistantEvent::TextDelta(text) = event {
+                on_token(text);
+            }
+        }
+        Ok(events)
+    }
 }
 
 /// Runtime events emitted during execution for UI display.
@@ -138,7 +154,21 @@ impl<C: ApiClient> ConversationRuntime<C> {
                 tools: self.tools.clone(),
             };
 
-            let events = self.api_client.stream(request)?;
+            // Stream with live token display
+            let mut streamed = false;
+            let events = self.api_client.stream_with_callback(request, &mut |text| {
+                if !streamed {
+                    // Clear spinner on first token
+                    eprint!("\r\x1b[K  ");
+                    streamed = true;
+                }
+                eprint!("{text}");
+                use std::io::Write;
+                std::io::stderr().flush().ok();
+            })?;
+            if streamed {
+                eprintln!(); // End the streamed line
+            }
 
             // Build assistant message from events
             let mut blocks = Vec::new();

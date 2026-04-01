@@ -185,6 +185,142 @@ impl OllamaClient {
 }
 
 impl ApiClient for OllamaClient {
+    fn stream_with_callback(
+        &mut self,
+        request: ApiRequest,
+        on_token: &mut dyn FnMut(&str),
+    ) -> Result<Vec<AssistantEvent>> {
+        let mut body = self.build_request_body(&request);
+        body["stream"] = json!(true);
+
+        let response = self
+            .http
+            .post(format!("{}/v1/chat/completions", self.base_url))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .map_err(|e: reqwest::Error| {
+                dxos_core::DxosError::Api(format!(
+                    "Failed to connect to Ollama at {}. Is it running? (ollama serve): {e}",
+                    self.base_url
+                ))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().unwrap_or_default();
+            return Err(dxos_core::DxosError::Api(format!("Ollama HTTP {status}: {text}")));
+        }
+
+        // Parse SSE stream line by line
+        let mut events = Vec::new();
+        let mut full_content = String::new();
+        let mut tool_calls_json: Vec<Value> = Vec::new();
+        let mut usage_event = None;
+
+        let text = response.text().map_err(|e: reqwest::Error| {
+            dxos_core::DxosError::Api(e.to_string())
+        })?;
+
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line == "data: [DONE]" {
+                continue;
+            }
+            let json_str = line.strip_prefix("data: ").unwrap_or(line);
+            let chunk: Value = match serde_json::from_str(json_str) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            // Extract delta content
+            if let Some(choices) = chunk["choices"].as_array() {
+                for choice in choices {
+                    let delta = &choice["delta"];
+
+                    // Text content — stream it live
+                    if let Some(content) = delta["content"].as_str() {
+                        if !content.is_empty() {
+                            on_token(content);
+                            full_content.push_str(content);
+                        }
+                    }
+
+                    // Tool calls (streamed as deltas)
+                    if let Some(tcs) = delta["tool_calls"].as_array() {
+                        for tc in tcs {
+                            let idx = tc["index"].as_u64().unwrap_or(0) as usize;
+                            while tool_calls_json.len() <= idx {
+                                tool_calls_json.push(json!({
+                                    "id": "",
+                                    "function": { "name": "", "arguments": "" }
+                                }));
+                            }
+                            if let Some(id) = tc["id"].as_str() {
+                                tool_calls_json[idx]["id"] = json!(id);
+                            }
+                            if let Some(name) = tc["function"]["name"].as_str() {
+                                let existing = tool_calls_json[idx]["function"]["name"]
+                                    .as_str().unwrap_or("").to_string();
+                                tool_calls_json[idx]["function"]["name"] =
+                                    json!(format!("{existing}{name}"));
+                            }
+                            if let Some(args) = tc["function"]["arguments"].as_str() {
+                                let existing = tool_calls_json[idx]["function"]["arguments"]
+                                    .as_str().unwrap_or("").to_string();
+                                tool_calls_json[idx]["function"]["arguments"] =
+                                    json!(format!("{existing}{args}"));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Usage (usually in last chunk)
+            if let Some(usage) = chunk.get("usage") {
+                usage_event = Some(AssistantEvent::Usage(TokenUsage {
+                    input_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as u32,
+                    output_tokens: usage["completion_tokens"].as_u64().unwrap_or(0) as u32,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 0,
+                }));
+            }
+        }
+
+        // Build final events from accumulated data
+        if let Some(usage) = usage_event {
+            events.push(usage);
+        }
+
+        // Process tool calls
+        let mut has_tool_calls = false;
+        for tc in &tool_calls_json {
+            let name = tc["function"]["name"].as_str().unwrap_or("");
+            if !name.is_empty() {
+                has_tool_calls = true;
+                events.push(AssistantEvent::ToolUse {
+                    id: tc["id"].as_str().unwrap_or("call_1").to_string(),
+                    name: name.to_string(),
+                    input: tc["function"]["arguments"].as_str().unwrap_or("{}").to_string(),
+                });
+            }
+        }
+
+        // If no structured tool calls, check text for embedded tool calls
+        if !has_tool_calls && !full_content.is_empty() {
+            if let Some(extracted) = extract_tool_call_from_text(&full_content) {
+                events.push(extracted);
+            } else {
+                events.push(AssistantEvent::TextDelta(full_content));
+            }
+        } else if !full_content.is_empty() {
+            events.push(AssistantEvent::TextDelta(full_content));
+        }
+
+        events.push(AssistantEvent::Stop);
+        Ok(events)
+    }
+
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>> {
         let body = self.build_request_body(&request);
 
