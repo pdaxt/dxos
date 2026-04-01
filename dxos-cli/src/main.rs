@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 mod models;
+mod repl;
 
 #[derive(Parser)]
 #[command(
@@ -33,6 +34,13 @@ enum Commands {
         /// Maximum turn iterations
         #[arg(long, default_value = "16")]
         max_turns: usize,
+    },
+
+    /// Interactive chat session with the agent
+    Chat {
+        /// Model to use
+        #[arg(short, long)]
+        model: Option<String>,
     },
 
     /// Download and configure a local model
@@ -89,6 +97,8 @@ fn main() -> Result<()> {
             permission,
             max_turns,
         } => cmd_run(prompt.join(" "), model, permission, max_turns),
+
+        Commands::Chat { model } => repl::run_repl(model),
 
         Commands::Setup => cmd_setup(),
 
