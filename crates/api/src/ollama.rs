@@ -2,6 +2,79 @@ use dxos_core::{Result, TokenUsage};
 use dxos_harness::{ApiClient, ApiRequest, AssistantEvent};
 use serde_json::{json, Value};
 
+/// Extract a tool call from text output.
+/// Many local models output tool calls as JSON in their response text instead
+/// of using the structured tool_calls field. This handles that pattern.
+fn extract_tool_call_from_text(text: &str) -> Option<AssistantEvent> {
+    // Strip markdown code fences if present
+    let cleaned = text
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+
+    // Try parsing as JSON with "name" and "arguments" fields
+    if let Ok(parsed) = serde_json::from_str::<Value>(cleaned) {
+        if let (Some(name), Some(args)) = (
+            parsed.get("name").and_then(|v| v.as_str()),
+            parsed.get("arguments"),
+        ) {
+            // Validate it's a known tool name
+            let known_tools = [
+                "read_file", "write_file", "edit_file", "bash",
+                "glob", "grep", "git",
+                "Read", "Write", "Edit", "Glob", "Grep",
+            ];
+            if known_tools.iter().any(|t| *t == name) {
+                return Some(AssistantEvent::ToolUse {
+                    id: format!("call_{}", rand_id()),
+                    name: name.to_string(),
+                    input: args.to_string(),
+                });
+            }
+        }
+
+        // Also handle {"name": "tool", "parameters": {...}} format
+        if let (Some(name), Some(params)) = (
+            parsed.get("name").and_then(|v| v.as_str()),
+            parsed.get("parameters"),
+        ) {
+            let known_tools = [
+                "read_file", "write_file", "edit_file", "bash",
+                "glob", "grep", "git",
+            ];
+            if known_tools.iter().any(|t| *t == name) {
+                return Some(AssistantEvent::ToolUse {
+                    id: format!("call_{}", rand_id()),
+                    name: name.to_string(),
+                    input: params.to_string(),
+                });
+            }
+        }
+    }
+
+    // Try to find JSON embedded in surrounding text
+    if let Some(start) = cleaned.find('{') {
+        if let Some(end) = cleaned.rfind('}') {
+            if start < end {
+                let json_str = &cleaned[start..=end];
+                return extract_tool_call_from_text(json_str);
+            }
+        }
+    }
+
+    None
+}
+
+fn rand_id() -> u32 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos()
+}
+
 pub struct OllamaClient {
     model: String,
     base_url: String,
@@ -12,8 +85,11 @@ impl OllamaClient {
     pub fn new(model: String, base_url: Option<String>) -> Self {
         Self {
             model,
-            base_url: base_url.unwrap_or_else(|| "http://localhost:11434".to_string()),
-            http: reqwest::blocking::Client::new(),
+            base_url: base_url.unwrap_or_else(|| "http://127.0.0.1:11434".to_string()),
+            http: reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(300))
+                .build()
+                .unwrap_or_else(|_| reqwest::blocking::Client::new()),
         }
     }
 
@@ -152,24 +228,19 @@ impl ApiClient for OllamaClient {
         }
 
         // Parse choices
+        let mut tool_call_count = 0u32;
         if let Some(choices) = resp["choices"].as_array() {
             for choice in choices {
                 let message = &choice["message"];
 
-                // Text content
-                if let Some(content) = message["content"].as_str() {
-                    if !content.is_empty() {
-                        events.push(AssistantEvent::TextDelta(content.to_string()));
-                    }
-                }
-
-                // Tool calls
+                // Structured tool calls (OpenAI format)
                 if let Some(tool_calls) = message["tool_calls"].as_array() {
                     for tc in tool_calls {
+                        tool_call_count += 1;
                         events.push(AssistantEvent::ToolUse {
                             id: tc["id"]
                                 .as_str()
-                                .unwrap_or("call_1")
+                                .unwrap_or_else(|| "call_1")
                                 .to_string(),
                             name: tc["function"]["name"]
                                 .as_str()
@@ -180,6 +251,22 @@ impl ApiClient for OllamaClient {
                                 .unwrap_or("{}")
                                 .to_string(),
                         });
+                    }
+                }
+
+                // Text content — also check for text-based tool calls
+                // Many local models output tool calls as JSON in their text
+                if let Some(content) = message["content"].as_str() {
+                    if !content.is_empty() && tool_call_count == 0 {
+                        // Try to extract tool calls from text
+                        if let Some(extracted) = extract_tool_call_from_text(content) {
+                            tool_call_count += 1;
+                            events.push(extracted);
+                        } else {
+                            events.push(AssistantEvent::TextDelta(content.to_string()));
+                        }
+                    } else if !content.is_empty() {
+                        events.push(AssistantEvent::TextDelta(content.to_string()));
                     }
                 }
             }
