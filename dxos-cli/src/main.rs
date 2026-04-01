@@ -119,11 +119,8 @@ fn cmd_run(prompt: String, model: Option<String>, permission: String, max_turns:
 
     let cwd = std::env::current_dir()?;
 
-    // Load config
-    let mut config = dxos_core::DxosConfig::load();
-    if let Some(m) = model {
-        config.provider.model = m;
-    }
+    // Auto-detect best available model, or use explicit --model
+    let (client, model_name) = dxos_api::ProviderClient::auto_detect(model.as_deref())?;
 
     // Build permission policy
     let mode = match permission.as_str() {
@@ -148,9 +145,6 @@ fn cmd_run(prompt: String, model: Option<String>, permission: String, max_turns:
     // Build system prompt
     let system_prompt = build_system_prompt(&cwd);
 
-    // Create API client
-    let client = dxos_api::ProviderClient::from_config(&config.provider)?;
-
     // Create runtime
     let mut runtime = dxos_harness::ConversationRuntime::new(
         client,
@@ -161,7 +155,7 @@ fn cmd_run(prompt: String, model: Option<String>, permission: String, max_turns:
     )
     .with_max_iterations(max_turns);
 
-    eprintln!("dxos v{} — model: {} — mode: {permission}", env!("CARGO_PKG_VERSION"), config.provider.model);
+    eprintln!("dxos v{} — model: {model_name} — mode: {permission}", env!("CARGO_PKG_VERSION"));
     eprintln!();
 
     // Run the turn
