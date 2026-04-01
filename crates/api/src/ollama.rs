@@ -78,6 +78,7 @@ fn rand_id() -> u32 {
 pub struct OllamaClient {
     model: String,
     base_url: String,
+    api_key: Option<String>,
     http: reqwest::blocking::Client,
 }
 
@@ -86,11 +87,35 @@ impl OllamaClient {
         Self {
             model,
             base_url: base_url.unwrap_or_else(|| "http://127.0.0.1:11434".to_string()),
+            api_key: None,
             http: reqwest::blocking::Client::builder()
                 .timeout(std::time::Duration::from_secs(300))
                 .build()
                 .unwrap_or_else(|_| reqwest::blocking::Client::new()),
         }
+    }
+
+    /// Create with an API key for OpenAI-compatible services (OpenAI, OpenRouter, Together, etc.)
+    pub fn new_with_key(model: String, base_url: Option<String>, api_key: Option<String>) -> Self {
+        Self {
+            model,
+            base_url: base_url.unwrap_or_else(|| "https://api.openai.com".to_string()),
+            api_key,
+            http: reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(300))
+                .build()
+                .unwrap_or_else(|_| reqwest::blocking::Client::new()),
+        }
+    }
+
+    fn build_http_request(&self, body: &Value) -> reqwest::blocking::RequestBuilder {
+        let mut req = self.http
+            .post(format!("{}/v1/chat/completions", self.base_url))
+            .header("content-type", "application/json");
+        if let Some(key) = &self.api_key {
+            req = req.bearer_auth(key);
+        }
+        req.json(body)
     }
 
     fn build_request_body(&self, request: &ApiRequest) -> Value {
@@ -193,15 +218,11 @@ impl ApiClient for OllamaClient {
         let mut body = self.build_request_body(&request);
         body["stream"] = json!(true);
 
-        let response = self
-            .http
-            .post(format!("{}/v1/chat/completions", self.base_url))
-            .header("content-type", "application/json")
-            .json(&body)
+        let response = self.build_http_request(&body)
             .send()
             .map_err(|e: reqwest::Error| {
                 dxos_core::DxosError::Api(format!(
-                    "Failed to connect to Ollama at {}. Is it running? (ollama serve): {e}",
+                    "Failed to connect to {}. Is the server running? {e}",
                     self.base_url
                 ))
             })?;
@@ -209,7 +230,7 @@ impl ApiClient for OllamaClient {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().unwrap_or_default();
-            return Err(dxos_core::DxosError::Api(format!("Ollama HTTP {status}: {text}")));
+            return Err(dxos_core::DxosError::Api(format!("HTTP {status}: {text}")));
         }
 
         // TRUE streaming: read response body line-by-line as chunks arrive
@@ -327,15 +348,11 @@ impl ApiClient for OllamaClient {
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>> {
         let body = self.build_request_body(&request);
 
-        let response = self
-            .http
-            .post(format!("{}/v1/chat/completions", self.base_url))
-            .header("content-type", "application/json")
-            .json(&body)
+        let response = self.build_http_request(&body)
             .send()
             .map_err(|e: reqwest::Error| {
                 dxos_core::DxosError::Api(format!(
-                    "Failed to connect to Ollama at {}. Is it running? (ollama serve): {e}",
+                    "Failed to connect to {}. Is the server running? {e}",
                     self.base_url
                 ))
             })?;

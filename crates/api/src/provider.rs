@@ -10,6 +10,7 @@ use crate::ollama::OllamaClient;
 pub enum ProviderClient {
     Anthropic(AnthropicClient),
     Local(OllamaClient),
+    OpenAI { client: OllamaClient },
 }
 
 impl ProviderClient {
@@ -32,11 +33,17 @@ impl ProviderClient {
             }
             ModelProvider::OpenAI => {
                 let api_key = resolve_api_key("OPENAI_API_KEY", &config.api_key)?;
-                // OpenAI uses the same format as Ollama (OpenAI-compatible)
-                Ok(Self::Local(OllamaClient::new(
-                    config.model.clone(),
-                    Some(config.base_url.clone().unwrap_or_else(|| "https://api.openai.com".to_string())),
-                )))
+                let base_url = config.base_url.clone()
+                    .unwrap_or_else(|| "https://api.openai.com".to_string());
+                // OpenAI-compatible: works with OpenAI, OpenRouter, Together, etc.
+                tracing::info!("Using OpenAI-compatible API at {base_url}");
+                Ok(Self::OpenAI {
+                    client: OllamaClient::new_with_key(
+                        config.model.clone(),
+                        Some(base_url),
+                        Some(api_key),
+                    ),
+                })
             }
             ModelProvider::Google => Err(dxos_core::DxosError::Config(
                 "Google provider coming soon".into(),
@@ -97,8 +104,36 @@ impl ProviderClient {
             return Ok((Self::from_config(&config)?, model));
         }
 
+        // 3. Check for OpenAI API key
+        if resolve_api_key("OPENAI_API_KEY", &None).is_ok() {
+            let model = model_hint.unwrap_or("gpt-4o").to_string();
+            let config = ProviderConfig {
+                provider: ModelProvider::OpenAI,
+                model: model.clone(),
+                api_key: None,
+                base_url: None,
+            };
+            return Ok((Self::from_config(&config)?, model));
+        }
+
+        // 4. Check for OpenRouter API key (100+ models through one key)
+        if let Ok(key) = resolve_api_key("OPENROUTER_API_KEY", &None) {
+            let model = model_hint.unwrap_or("anthropic/claude-sonnet-4").to_string();
+            let client = OllamaClient::new_with_key(
+                model.clone(),
+                Some("https://openrouter.ai/api".to_string()),
+                Some(key),
+            );
+            tracing::info!("Using OpenRouter: {model}");
+            return Ok((Self::OpenAI { client }, model));
+        }
+
         Err(dxos_core::DxosError::Config(
-            "No model available. Install Ollama (ollama.com) or set ANTHROPIC_API_KEY.".into(),
+            "No model available. Options:\n  \
+             1. Install Ollama (ollama.com) — free, local\n  \
+             2. export ANTHROPIC_API_KEY=sk-...\n  \
+             3. export OPENAI_API_KEY=sk-...\n  \
+             4. export OPENROUTER_API_KEY=sk-... (100+ models)".into(),
         ))
     }
 }
@@ -154,6 +189,19 @@ impl ApiClient for ProviderClient {
         match self {
             Self::Anthropic(client) => client.stream(request),
             Self::Local(client) => client.stream(request),
+            Self::OpenAI { client } => client.stream(request),
+        }
+    }
+
+    fn stream_with_callback(
+        &mut self,
+        request: ApiRequest,
+        on_token: &mut dyn FnMut(&str),
+    ) -> Result<Vec<AssistantEvent>> {
+        match self {
+            Self::Anthropic(client) => client.stream_with_callback(request, on_token),
+            Self::Local(client) => client.stream_with_callback(request, on_token),
+            Self::OpenAI { client } => client.stream_with_callback(request, on_token),
         }
     }
 }
