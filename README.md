@@ -193,7 +193,7 @@ cargo build --release  # Build release binary (~15MB)
 
 ## Acknowledgments
 
-DXOS builds on ideas from the AI coding agent community — particularly the architectural patterns documented in [claw-code](https://github.com/instructkr/claw-code) and the orchestration patterns from [dx-terminal](https://github.com/pdaxt/dx-terminal).
+DXOS is original work built from scratch in Rust, informed by publicly documented agent design patterns and the open-source AI coding community.
 
 ## License
 
