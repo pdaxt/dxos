@@ -1,0 +1,14 @@
+[package]
+name = "dxos-fleet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Multi-agent fleet orchestration — spawn, monitor, coordinate"
+
+[lints]
+workspace = true
+
+[dependencies]
+dxos-core = { path = "../core" }
+serde = { workspace = true }
+serde_json = { workspace = true }

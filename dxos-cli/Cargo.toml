@@ -1,0 +1,28 @@
+[package]
+name = "dxos-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "DXOS CLI — the open-source AI agent operating system"
+
+[[bin]]
+name = "dxos"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+dxos-core = { path = "../crates/core" }
+dxos-tools = { path = "../crates/tools" }
+dxos-harness = { path = "../crates/harness" }
+dxos-api = { path = "../crates/api" }
+dxos-fleet = { path = "../crates/fleet" }
+dxos-brain = { path = "../crates/brain" }
+dxos-dashboard = { path = "../crates/dashboard" }
+tokio = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }

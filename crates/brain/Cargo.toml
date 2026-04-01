@@ -1,0 +1,16 @@
+[package]
+name = "dxos-brain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Persistent cross-session memory and knowledge graph"
+
+[lints]
+workspace = true
+
+[dependencies]
+dxos-core = { path = "../core" }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }

@@ -1,0 +1,19 @@
+[package]
+name = "dxos-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Multi-provider LLM API client — Anthropic, OpenAI, local models"
+
+[lints]
+workspace = true
+
+[dependencies]
+dxos-core = { path = "../core" }
+dxos-harness = { path = "../harness" }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+futures-util = { workspace = true }

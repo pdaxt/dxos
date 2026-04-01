@@ -1,0 +1,16 @@
+[package]
+name = "dxos-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared types, errors, and configuration for DXOS"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
