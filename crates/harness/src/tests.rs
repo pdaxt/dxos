@@ -198,8 +198,7 @@ mod tests {
             .expect("run turn");
 
         assert_eq!(summary.text, "hello");
-        assert!(recorder.events.contains(&"thinking".to_string()));
-        assert!(recorder.events.contains(&"text:hello".to_string()));
+        // Spinner now runs in a background thread, not via listener events
         assert!(recorder.events.contains(&"done".to_string()));
     }
 

@@ -145,8 +145,38 @@ impl<C: ApiClient> ConversationRuntime<C> {
                 return Err(DxosError::TurnLimitExceeded { iterations });
             }
 
-            // Notify UI: thinking
-            listener.on_event(RuntimeEvent::Thinking);
+            // Start animated spinner in background thread
+            let spinner_running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+            let spinner_flag = spinner_running.clone();
+            let spinner_thread = std::thread::spawn(move || {
+                let start = std::time::Instant::now();
+                let mut frame = 0usize;
+                while spinner_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    let elapsed = start.elapsed().as_secs_f64();
+                    // Inline spinner rendering to avoid cross-crate dep
+                    let spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                    let verbs = [
+                        "Thinking", "Analyzing", "Reading", "Processing", "Examining",
+                        "Evaluating", "Searching", "Scanning", "Investigating", "Exploring",
+                        "Reasoning", "Computing", "Architecting", "Synthesizing", "Parsing",
+                    ];
+                    let s = spinner_chars[frame % spinner_chars.len()];
+                    let v = verbs[(elapsed as usize / 3) % verbs.len()];
+                    let dot_phase = ((elapsed * 3.0) as usize) % 6;
+                    let dots = match dot_phase {
+                        0 => "   ", 1 => ".  ", 2 => ".. ",
+                        3 => "...", 4 => ".. ", 5 => ".  ", _ => "...",
+                    };
+                    let color = if elapsed < 5.0 { "\x1b[36m" }
+                        else if elapsed < 15.0 { "\x1b[33m" }
+                        else { "\x1b[31m" };
+                    eprint!("\r{color}{s}\x1b[0m \x1b[2m{v}{dots}\x1b[0m   ");
+                    use std::io::Write;
+                    std::io::stderr().flush().ok();
+                    frame += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(120));
+                }
+            });
 
             let request = ApiRequest {
                 system_prompt: self.system_prompt.clone(),
@@ -155,20 +185,31 @@ impl<C: ApiClient> ConversationRuntime<C> {
             };
 
             // Stream with live token display
+            let spinner_flag2 = spinner_running.clone();
             let mut streamed = false;
             let events = self.api_client.stream_with_callback(request, &mut |text| {
                 if !streamed {
-                    // Clear spinner on first token
+                    // Stop spinner, clear line
+                    spinner_flag2.store(false, std::sync::atomic::Ordering::Relaxed);
+                    std::thread::sleep(std::time::Duration::from_millis(150));
                     eprint!("\r\x1b[K  ");
                     streamed = true;
                 }
                 eprint!("{text}");
                 use std::io::Write;
                 std::io::stderr().flush().ok();
-            })?;
+            });
+
+            // Stop spinner
+            spinner_running.store(false, std::sync::atomic::Ordering::Relaxed);
+            let _ = spinner_thread.join();
             if streamed {
-                eprintln!(); // End the streamed line
+                eprintln!();
+            } else {
+                eprint!("\r\x1b[K"); // Clear spinner if no streaming happened
             }
+
+            let events = events?;
 
             // Build assistant message from events
             let mut blocks = Vec::new();

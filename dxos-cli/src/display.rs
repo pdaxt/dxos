@@ -88,11 +88,24 @@ pub fn print_thinking_start() {
     eprintln!("\x1b[2;3mthinking...\x1b[0m");
 }
 
-/// Print a spinner with a verb (call in a loop with frame index)
+/// Print a spinner with animated dots and rotating verb.
+/// Dots cycle: ...  .. .  (empty) .  ..  ...
 pub fn print_spinner(frame: usize, elapsed_secs: f64) {
     let spinner = SPINNER_FRAMES[frame % SPINNER_FRAMES.len()];
     let verb_idx = (elapsed_secs as usize / 3) % SPINNER_VERBS.len();
     let verb = SPINNER_VERBS[verb_idx];
+
+    // Animated dots: cycles through phases
+    let dot_phase = ((elapsed_secs * 3.0) as usize) % 6;
+    let dots = match dot_phase {
+        0 => "   ",
+        1 => ".  ",
+        2 => ".. ",
+        3 => "...",
+        4 => ".. ",
+        5 => ".  ",
+        _ => "...",
+    };
 
     // Color shifts toward yellow/red as time increases
     let color = if elapsed_secs < 5.0 {
@@ -103,7 +116,7 @@ pub fn print_spinner(frame: usize, elapsed_secs: f64) {
         "\x1b[31m" // red (stalling)
     };
 
-    eprint!("\r{color}{spinner}\x1b[0m \x1b[2m{verb}...\x1b[0m   ");
+    eprint!("\r{color}{spinner}\x1b[0m \x1b[2m{verb}{dots}\x1b[0m   ");
     io::stderr().flush().ok();
 }
 
