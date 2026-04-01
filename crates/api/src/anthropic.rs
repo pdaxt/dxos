@@ -92,12 +92,20 @@ impl ApiClient for AnthropicClient {
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>> {
         let body = self.build_request_body(&request);
 
-        let response = self
+        // OAuth tokens (sk-ant-oat) use Bearer auth; raw API keys use x-api-key header
+        let mut req = self
             .http
             .post(format!("{}/v1/messages", self.base_url))
-            .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
+            .header("content-type", "application/json");
+
+        if self.api_key.starts_with("sk-ant-oat") {
+            req = req.bearer_auth(&self.api_key);
+        } else {
+            req = req.header("x-api-key", &self.api_key);
+        }
+
+        let response = req
             .json(&body)
             .send()
             .map_err(|e: reqwest::Error| dxos_core::DxosError::Api(e.to_string()))?;
