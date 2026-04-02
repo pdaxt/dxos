@@ -41,17 +41,11 @@ DXOS is the engine. Rebuilt from scratch in Rust. Open-source. Designed to run *
 Every AI coding tool burns tokens describing its tools to the model. More tools = more cost per request.
 
 - **Claude Code**: ~206 tools in system prompt = ~10,000 tokens overhead
-- **DXOS**: 7 native Rust tools = ~350 tokens overhead
+- **DXOS**: 8 native Rust tools = ~400 tokens overhead
 
 At $3/MTok input, that's **$0.03 vs $0.001 per session** just for tool definitions. Over thousands of sessions, DXOS saves real money.
 
 ## Install
-
-```bash
-cargo install dxos-cli
-```
-
-Or build from source:
 
 ```bash
 git clone https://github.com/pdaxt/dxos
@@ -59,43 +53,46 @@ cd dxos
 cargo install --path dxos-cli
 ```
 
-Set your API key:
+**No API key needed** — DXOS auto-detects the best available model:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+# Option 1: Free local models (recommended)
+brew install ollama && ollama pull qwen2.5-coder:32b
+dxos setup   # interactive model picker
+
+# Option 2: Any API key
+export ANTHROPIC_API_KEY=sk-ant-...   # Claude
+export OPENAI_API_KEY=sk-...          # GPT-4o
+export OPENROUTER_API_KEY=sk-...      # 100+ models
 ```
 
 ## Quick Start
 
 ```bash
-# Run a single agent task
-dxos run "add input validation to the signup endpoint"
+# Interactive REPL (recommended)
+dxos chat
 
-# Initialize project-specific config
-dxos init
+# One-shot task
+dxos run "fix the auth bug in handler.rs"
 
-# Use a different model
-dxos run --model gpt-4o "explain how auth works in this codebase"
+# Use a specific model
+dxos chat --model qwen2.5-coder:32b
 
-# Full access mode (allows shell commands without prompting)
+# Full access mode (no permission prompts)
 dxos run --permission full-access "run the test suite and fix failures"
+
+# Initialize project config
+dxos init
 ```
 
-### Coming in v0.2
+### Features
 
-```bash
-# Spawn 8 agents to close all P0 issues
-dxos fleet "close all P0 issues" --agents 8
-
-# Query persistent memory
-dxos brain "how does the payment flow work?"
-
-# Real-time monitoring dashboard
-dxos dash
-
-# Session audit trail
-dxos log
-```
+- **SSE streaming** — text appears token-by-token as the model generates it
+- **Animated spinner** — cycling dots with rotating verbs while thinking
+- **REPL history** — up-arrow recall, persistent across sessions
+- **3-layer context compression** — MicroCompact → AutoCompact → Emergency
+- **Agent mode** — uses tools directly, never suggests commands for you to copy
+- **Smart model detection** — auto-picks the best available: Ollama → Anthropic → OpenAI → OpenRouter
 
 ## Architecture
 
@@ -114,9 +111,9 @@ dxos/
 │   └── dashboard/     # Real-time TUI monitoring [v0.2]
 ```
 
-### Why 7 tools instead of 200?
+### Why 8 tools instead of 200?
 
-Every tool you add to the system prompt costs tokens and adds decision complexity for the model. We found that **7 tools cover 95% of coding tasks**:
+Every tool you add to the system prompt costs tokens and adds decision complexity for the model. 8 tools cover 95% of coding tasks:
 
 | Tool | What it does | Implementation |
 |---|---|---|
@@ -127,6 +124,7 @@ Every tool you add to the system prompt costs tokens and adds decision complexit
 | `glob` | Find files by pattern | `ignore` crate (same as ripgrep) |
 | `grep` | Search file contents | `regex` + `ignore` (respects .gitignore) |
 | `git` | Git operations | Shell passthrough |
+| `web_fetch` | Fetch URL content | `reqwest` with HTML stripping |
 
 All tools run as **native Rust function calls** inside the same process. No subprocess spawning, no JSON-RPC overhead, no MCP protocol negotiation.
 
@@ -155,27 +153,33 @@ Session compaction if context grows large
 ## Roadmap
 
 ### v0.1 — Solo Agent (current)
-- [x] Native Rust tool implementations
+- [x] 8 native Rust tool implementations
 - [x] Conversation runtime with turn loop
 - [x] Permission gating (read-only → workspace-write → full-access)
-- [x] Session compaction
-- [x] Anthropic API client
-- [x] CLI with `dxos run`
+- [x] 3-layer context compression (MicroCompact → AutoCompact → Emergency)
+- [x] SSE streaming output (token-by-token)
+- [x] Animated spinner with cycling dots and rotating verbs
+- [x] Interactive REPL with readline history
+- [x] Multi-provider: Anthropic, OpenAI, OpenRouter, Ollama/local
+- [x] Smart model auto-detection
+- [x] Interactive model setup with system detection
+- [x] Agent-mode system prompt (uses tools, doesn't suggest commands)
+- [x] Text-based tool extraction (works with any model)
 - [x] CLAUDE.md / DXOS.md project instruction loading
+- [x] 37 tests
 
 ### v0.2 — Fleet + Brain
 - [ ] Multi-agent fleet on isolated git worktrees
 - [ ] Persistent SQLite-backed memory (brain)
 - [ ] Real-time TUI dashboard (Ratatui)
-- [ ] OpenAI provider
 - [ ] Session logging and cost tracking
-- [ ] SSE streaming output
+- [ ] Extended thinking mode display
 
-### v0.3 — Local + Enterprise
-- [ ] Local model support (Ollama, vLLM)
+### v0.3 — Enterprise
 - [ ] Agent governance and audit trails
 - [ ] Web dashboard
 - [ ] Plugin system
+- [ ] IDE bridge (VS Code, JetBrains)
 
 ## Contributing
 
