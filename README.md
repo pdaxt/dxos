@@ -13,9 +13,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/pdaxt/dxos/actions/workflows/ci.yml"><img src="https://github.com/pdaxt/dxos/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/pdaxt/dxos/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/pdaxt/dxos/actions"><img src="https://img.shields.io/badge/tests-39_passing-brightgreen.svg" alt="Tests"></a>
-  <a href="https://github.com/pdaxt/dxos/releases"><img src="https://img.shields.io/badge/warnings-0-brightgreen.svg" alt="Warnings"></a>
+  <a href="https://github.com/pdaxt/dxos/releases/latest"><img src="https://img.shields.io/github/v/release/pdaxt/dxos?label=release" alt="Release"></a>
+  <a href="https://github.com/pdaxt/dxos/stargazers"><img src="https://img.shields.io/github/stars/pdaxt/dxos?style=flat" alt="Stars"></a>
 </p>
 
 ---
