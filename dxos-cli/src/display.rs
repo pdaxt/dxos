@@ -1,5 +1,4 @@
 use std::io::{self, Write};
-use std::time::Instant;
 
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -79,11 +78,13 @@ fn summarize_tool_input(name: &str, input: &str) -> String {
 }
 
 /// Print the response border (Claude Code style)
+#[allow(dead_code)]
 pub fn print_response_start() {
     eprint!("\x1b[2m⎿ \x1b[0m");
 }
 
 /// Print thinking indicator
+#[allow(dead_code)]
 pub fn print_thinking_start() {
     eprintln!("\x1b[2;3mthinking...\x1b[0m");
 }

@@ -10,6 +10,7 @@ struct ModelEntry {
     size: &'static str,
     ram: &'static str,
     tool_use: u8,       // 1-5 rating
+    #[allow(dead_code)]
     speed: &'static str,
     description: &'static str,
     ollama_id: &'static str,
@@ -330,6 +331,7 @@ fn download_model(model: &ModelEntry, has_ollama: bool) -> Result<String> {
 }
 
 /// Check if any usable model exists. If not, trigger interactive setup.
+#[allow(dead_code)]
 pub fn ensure_model_available() -> Result<String> {
     // Check Ollama models
     if ollama_installed() {

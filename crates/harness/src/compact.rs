@@ -1,4 +1,4 @@
-use dxos_core::{ContentBlock, ConversationMessage, MessageRole, Session, TokenUsage};
+use dxos_core::{ContentBlock, ConversationMessage, MessageRole, Session};
 
 #[derive(Debug, Clone)]
 pub struct CompactionConfig {
@@ -69,7 +69,7 @@ fn micro_compact(session: &mut Session) {
             continue;
         }
         for block in &mut msg.blocks {
-            if let ContentBlock::ToolResult { output, tool_name, .. } = block {
+            if let ContentBlock::ToolResult { output, tool_name: _, .. } = block {
                 let original_len = output.len();
                 if original_len > 2000 {
                     // Trim long tool outputs — keep first and last 500 chars
