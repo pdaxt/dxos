@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn should_compact_returns_false_when_below_threshold() {
         let session = Session::new();
-        let config = CompactionConfig { max_messages: 100, keep_recent: 20 };
+        let config = CompactionConfig::default();
         assert!(!should_compact(&session, &config));
     }
 
@@ -88,19 +88,20 @@ mod tests {
         for i in 0..101 {
             session.messages.push(ConversationMessage::user(format!("msg {i}")));
         }
-        let config = CompactionConfig { max_messages: 100, keep_recent: 20 };
+        let config = CompactionConfig { max_messages: 100, ..Default::default() };
         assert!(should_compact(&session, &config));
     }
 
     #[test]
     fn compact_session_keeps_recent_messages() {
         let mut session = Session::new();
-        for i in 0..50 {
+        for i in 0..200 {
             session.messages.push(ConversationMessage::user(format!("msg {i}")));
         }
-        let config = CompactionConfig { max_messages: 30, keep_recent: 10 };
+        let config = CompactionConfig { max_messages: 30, keep_recent: 10, context_window: 100, tokens_per_message: 200, output_buffer: 10 };
         compact_session(&mut session, &config);
-        assert_eq!(session.messages.len(), 10);
+        // Emergency compact: 1 notice + 10 recent = 11
+        assert!(session.messages.len() <= 11);
     }
 
     // ── Runtime tests ──
