@@ -6,8 +6,8 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
 use crate::display;
-use crate::models;
 use crate::prompt;
+use crate::setup;
 
 /// CLI listener that renders rich terminal output.
 struct CliListener {
@@ -59,12 +59,11 @@ impl RuntimeListener for CliListener {
 pub fn run_repl(model: Option<String>) -> Result<()> {
     let cwd = std::env::current_dir()?;
 
-    // Auto-detect or setup model
+    // Auto-detect or auto-setup model (zero config)
     let (client, model_name) = match dxos_api::ProviderClient::auto_detect(model.as_deref()) {
         Ok(result) => result,
         Err(_) => {
-            eprintln!("No model available. Let's set one up.\n");
-            let model_id = models::interactive_setup()?;
+            let model_id = setup::ensure_ready()?;
             dxos_api::ProviderClient::auto_detect(Some(&model_id))?
         }
     };
@@ -150,8 +149,9 @@ pub fn run_repl(model: Option<String>) -> Result<()> {
                 }
                 "/clear" => {
                     let new_registry = dxos_tools::ToolRegistry::default_cli();
+                    let (new_client, _) = dxos_api::ProviderClient::auto_detect(Some(&model_name))?;
                     runtime = dxos_harness::ConversationRuntime::new(
-                        dxos_api::ProviderClient::auto_detect(Some(&model_name))?.0,
+                        new_client,
                         dxos_harness::PermissionPolicy::new(dxos_harness::PermissionMode::WorkspaceWrite)
                             .with_tool("read_file", dxos_harness::PermissionMode::ReadOnly)
                             .with_tool("glob", dxos_harness::PermissionMode::ReadOnly)

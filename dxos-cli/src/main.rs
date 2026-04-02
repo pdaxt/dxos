@@ -5,151 +5,155 @@ mod display;
 mod models;
 mod prompt;
 mod repl;
+mod setup;
 
 #[derive(Parser)]
 #[command(
     name = "dxos",
-    about = "The open-source AI agent operating system",
+    about = "AI coding agent. No API key. No setup. Just works.",
     version,
-    long_about = "DXOS — One Rust binary. Any model. From solo dev to agent fleet.\n\nhttps://github.com/pdaxt/dxos"
+    long_about = "DXOS — One binary. Works offline. Free forever.\n\nhttps://github.com/pdaxt/dxos"
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Run a single agent session with a prompt
-    Run {
-        /// The task or question for the agent
-        prompt: Vec<String>,
-
-        /// Model to use (e.g. qwen3:8b, llama3.1, claude-sonnet-4)
+    /// Interactive chat with the agent
+    Chat {
         #[arg(short, long)]
         model: Option<String>,
+    },
 
-        /// Permission mode: read-only, workspace-write, full-access
+    /// Run a single prompt
+    Run {
+        prompt: Vec<String>,
+        #[arg(short, long)]
+        model: Option<String>,
         #[arg(short, long, default_value = "workspace-write")]
         permission: String,
-
-        /// Maximum turn iterations
         #[arg(long, default_value = "16")]
         max_turns: usize,
     },
 
-    /// Interactive chat session with the agent
-    Chat {
-        /// Model to use
-        #[arg(short, long)]
-        model: Option<String>,
-    },
+    /// Find and fix issues automatically
+    Fix,
 
-    /// Download and configure a local model
+    /// Review uncommitted changes
+    Review,
+
+    /// Explain the current codebase
+    Explain,
+
+    /// Run tests and fix failures
+    Test,
+
+    /// Generate commit message and commit
+    Commit,
+
+    /// Generate PR description and create PR
+    Pr,
+
+    /// Download and configure a model
     Setup,
 
-    /// Spawn a fleet of agents on isolated worktrees
-    Fleet {
-        /// The mission for the fleet
-        prompt: Vec<String>,
-
-        /// Number of agents to spawn
-        #[arg(short = 'n', long, default_value = "4")]
-        agents: usize,
-    },
-
-    /// Query persistent memory across sessions
-    Brain {
-        /// What to recall
-        query: Vec<String>,
-    },
-
-    /// Open the real-time TUI dashboard
-    Dash,
-
-    /// Show session log — what agents did and what it cost
-    Log {
-        /// Number of recent sessions to show
-        #[arg(short, long, default_value = "10")]
-        limit: usize,
-    },
-
-    /// Initialize .dxos/ in the current project
+    /// Initialize .dxos/ in project
     Init,
 
-    /// Show current configuration
+    /// Show config
     Config,
 }
 
 fn main() -> Result<()> {
+    // Minimal logging — don't spam the user
     tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("dxos=info".parse()?),
-        )
+        .with_env_filter("dxos=warn")
         .with_target(false)
+        .without_time()
         .init();
 
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run {
-            prompt,
-            model,
-            permission,
-            max_turns,
-        } => cmd_run(prompt.join(" "), model, permission, max_turns),
+        // No subcommand = default to chat
+        None => repl::run_repl(None),
 
-        Commands::Chat { model } => repl::run_repl(model),
+        Some(Commands::Chat { model }) => repl::run_repl(model),
 
-        Commands::Setup => cmd_setup(),
+        Some(Commands::Run { prompt, model, permission, max_turns }) => {
+            cmd_run(prompt.join(" "), model, permission, max_turns)
+        }
 
-        Commands::Fleet { prompt, agents } => {
-            eprintln!("Fleet mode coming in v0.2 — {agents} agents on isolated worktrees");
-            eprintln!("Mission: {}", prompt.join(" "));
+        Some(Commands::Fix) => {
+            cmd_run(
+                "Find all bugs, issues, and code smells in this codebase. Fix them. Run tests to verify.".into(),
+                None, "workspace-write".into(), 16,
+            )
+        }
+
+        Some(Commands::Review) => {
+            cmd_run(
+                "Run `git diff` to see uncommitted changes. Review each change for bugs, security issues, and code quality. Be specific and actionable.".into(),
+                None, "read-only".into(), 8,
+            )
+        }
+
+        Some(Commands::Explain) => {
+            cmd_run(
+                "Read the key files in this project (start with README, Cargo.toml or package.json, then main entry point). Give a concise explanation of what this project does, its architecture, and key design decisions.".into(),
+                None, "read-only".into(), 8,
+            )
+        }
+
+        Some(Commands::Test) => {
+            cmd_run(
+                "Run the test suite (detect the test command from package.json, Cargo.toml, or Makefile). If any tests fail, read the failing test and the code it tests, then fix the issue. Re-run tests to verify.".into(),
+                None, "full-access".into(), 16,
+            )
+        }
+
+        Some(Commands::Commit) => {
+            cmd_run(
+                "Run `git diff --staged` to see staged changes. If nothing is staged, run `git diff` for unstaged changes. Generate a concise, conventional commit message (e.g. 'fix: ...', 'feat: ...', 'refactor: ...'). Then run `git add -A && git commit -m \"<message>\"`.".into(),
+                None, "full-access".into(), 4,
+            )
+        }
+
+        Some(Commands::Pr) => {
+            cmd_run(
+                "Run `git log --oneline main..HEAD` to see commits on this branch. Generate a PR title and description with a summary and test plan. Then run `gh pr create --title \"<title>\" --body \"<description>\"`.".into(),
+                None, "full-access".into(), 4,
+            )
+        }
+
+        Some(Commands::Setup) => {
+            setup::auto_setup()?;
             Ok(())
         }
 
-        Commands::Brain { query } => {
-            eprintln!("Brain coming in v0.2 — persistent cross-session memory");
-            eprintln!("Query: {}", query.join(" "));
-            Ok(())
-        }
-
-        Commands::Dash => {
-            eprintln!("Dashboard coming in v0.2 — real-time TUI with Ratatui");
-            Ok(())
-        }
-
-        Commands::Log { limit } => {
-            eprintln!("Session log coming in v0.2 — last {limit} sessions");
-            Ok(())
-        }
-
-        Commands::Init => cmd_init(),
-        Commands::Config => cmd_config(),
+        Some(Commands::Init) => cmd_init(),
+        Some(Commands::Config) => cmd_config(),
     }
 }
 
-fn cmd_run(prompt: String, model: Option<String>, permission: String, max_turns: usize) -> Result<()> {
-    if prompt.is_empty() {
-        anyhow::bail!("No prompt provided. Usage: dxos run \"fix the auth bug\"");
+fn cmd_run(prompt_text: String, model: Option<String>, permission: String, max_turns: usize) -> Result<()> {
+    if prompt_text.is_empty() {
+        anyhow::bail!("No prompt. Usage: dxos run \"fix the bug\"");
     }
 
     let cwd = std::env::current_dir()?;
 
-    // Auto-detect best available model, or use explicit --model
-    // If nothing is available, trigger interactive setup
+    // Auto-detect or auto-setup model
     let (client, model_name) = match dxos_api::ProviderClient::auto_detect(model.as_deref()) {
         Ok(result) => result,
         Err(_) => {
-            eprintln!("No model available. Let's set one up.\n");
-            let model_id = models::interactive_setup()?;
+            let model_id = setup::ensure_ready()?;
             dxos_api::ProviderClient::auto_detect(Some(&model_id))?
         }
     };
 
-    // Build permission policy
     let mode = match permission.as_str() {
         "read-only" => dxos_harness::PermissionMode::ReadOnly,
         "full-access" => dxos_harness::PermissionMode::FullAccess,
@@ -160,55 +164,34 @@ fn cmd_run(prompt: String, model: Option<String>, permission: String, max_turns:
         .with_tool("read_file", dxos_harness::PermissionMode::ReadOnly)
         .with_tool("glob", dxos_harness::PermissionMode::ReadOnly)
         .with_tool("grep", dxos_harness::PermissionMode::ReadOnly)
+        .with_tool("web_fetch", dxos_harness::PermissionMode::ReadOnly)
         .with_tool("write_file", dxos_harness::PermissionMode::WorkspaceWrite)
         .with_tool("edit_file", dxos_harness::PermissionMode::WorkspaceWrite)
         .with_tool("git", dxos_harness::PermissionMode::WorkspaceWrite)
         .with_tool("bash", dxos_harness::PermissionMode::FullAccess);
 
-    // Build tool definitions
     let registry = dxos_tools::ToolRegistry::default_cli();
     let tools = registry.to_api_definitions();
-
-    // Build system prompt
     let system_prompt = prompt::build_system_prompt(&cwd);
 
-    // Create runtime
     let mut runtime = dxos_harness::ConversationRuntime::new(
-        client,
-        policy,
-        system_prompt,
-        tools,
-        cwd,
-    )
-    .with_max_iterations(max_turns);
+        client, policy, system_prompt, tools, cwd,
+    ).with_max_iterations(max_turns);
 
-    eprintln!("dxos v{} — model: {model_name} — mode: {permission}", env!("CARGO_PKG_VERSION"));
+    eprintln!("\x1b[2mdxos v{} | {model_name} | {permission}\x1b[0m", env!("CARGO_PKG_VERSION"));
     eprintln!();
 
-    // Run the turn
-    let summary = runtime.run_turn(&prompt, None)?;
+    let start = std::time::Instant::now();
+    let summary = runtime.run_turn(&prompt_text, None)?;
 
-    // Print output
-    println!("{}", summary.text);
+    // Only print text if it wasn't already streamed
+    if !summary.was_streamed && !summary.text.is_empty() {
+        println!("{}", summary.text);
+    }
 
-    eprintln!();
-    eprintln!(
-        "--- {} tool calls | {} iterations | {} tokens ---",
-        summary.tool_calls,
-        summary.iterations,
-        summary.usage.total_tokens()
-    );
+    let elapsed = start.elapsed().as_secs_f64();
+    display::print_summary(summary.tool_calls, summary.iterations, summary.usage.total_tokens(), elapsed);
 
-    Ok(())
-}
-
-fn cmd_setup() -> Result<()> {
-    let model = models::interactive_setup()?;
-    eprintln!();
-    eprintln!("  Ready! Try:");
-    eprintln!("    dxos run \"explain this codebase\"");
-    eprintln!();
-    eprintln!("  Using model: {model}");
     Ok(())
 }
 
@@ -223,16 +206,8 @@ fn cmd_init() -> Result<()> {
 
     std::fs::create_dir_all(&dxos_dir)?;
     std::fs::write(
-        dxos_dir.join("config.toml"),
-        r#"# DXOS project configuration
-[provider]
-provider = "local"
-model = "qwen3:8b"
-
-[settings]
-max_turns = 16
-permission_mode = "workspace-write"
-"#,
+        dxos_dir.join("instructions.md"),
+        "# Project Instructions\n\n<!-- Add project-specific instructions for the AI agent here -->\n",
     )?;
 
     eprintln!("Initialized .dxos/ in {}", cwd.display());
@@ -244,4 +219,3 @@ fn cmd_config() -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&config)?);
     Ok(())
 }
-
