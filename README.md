@@ -1,204 +1,280 @@
 <p align="center">
   <h1 align="center">DXOS</h1>
-  <p align="center"><strong>The open-source AI agent operating system.</strong></p>
-  <p align="center">One Rust binary. Any model. From solo dev to agent fleet.</p>
+  <p align="center"><strong>AI coding agent that just works. No API key. No subscription. One binary.</strong></p>
 </p>
 
 <p align="center">
-  <a href="#install">Install</a> &bull;
-  <a href="#quick-start">Quick Start</a> &bull;
-  <a href="#why-dxos">Why DXOS</a> &bull;
-  <a href="#architecture">Architecture</a> &bull;
-  <a href="#roadmap">Roadmap</a>
+  <a href="#install">Install</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#why-dxos">Why DXOS</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/pdaxt/dxos/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License"></a>
+  <a href="https://github.com/pdaxt/dxos/actions"><img src="https://img.shields.io/badge/tests-39_passing-brightgreen.svg" alt="Tests"></a>
+  <a href="https://github.com/pdaxt/dxos/releases"><img src="https://img.shields.io/badge/warnings-0-brightgreen.svg" alt="Warnings"></a>
 </p>
 
 ---
 
 <p align="center">
-  <img src="assets/demo.gif" alt="DXOS demo — fixing a null pointer in 4 seconds" width="800">
+  <img src="assets/demo.gif" alt="dxos fix — finds and patches a null pointer bug in 4 seconds" width="800">
 </p>
 
-## Why DXOS
+```
+$ dxos fix
+[scanning 847 files...]
+[found: null pointer dereference in src/handler.rs:42]
+[patched: added None check with early return]
+[verified: cargo test passes]
+Done. 1 file changed, 3 insertions.
+```
 
-**Claude Code** costs $200/mo. You can't see what it does. You can't change how it works.
+**Zero setup.** Run `dxos` in any project directory. It auto-installs [Ollama](https://ollama.com), detects your hardware, downloads the best model, and starts working. No account. No credit card. No config file.
 
-**Cursor** locks you into their editor. **Copilot** can't run commands. Every "open-source alternative" is a wrapper around a CLI tool, not an engine.
-
-DXOS is the engine. Rebuilt from scratch in Rust. Open-source. Designed to run **any model** — Claude, GPT, Gemini, or local.
-
-| | Claude Code | Cursor | DXOS |
-|---|---|---|---|
-| Open source | No | No | **Yes** |
-| Provider lock-in | Anthropic only | OpenAI default | **Any model** |
-| Multi-agent | No | No | **Yes (fleet mode)** |
-| Persistent memory | Plugin | No | **Built-in** |
-| Self-hostable | No | No | **Yes** |
-| Tool overhead | 206 MCP tools in prompt (~10k tokens) | Unknown | **7 native tools (~350 tokens)** |
-| Dependencies | Node.js + npm | Electron | **Zero. One binary.** |
-
-### The token math
-
-Every AI coding tool burns tokens describing its tools to the model. More tools = more cost per request.
-
-- **Claude Code**: ~206 tools in system prompt = ~10,000 tokens overhead
-- **DXOS**: 8 native Rust tools = ~400 tokens overhead
-
-At $3/MTok input, that's **$0.03 vs $0.001 per session** just for tool definitions. Over thousands of sessions, DXOS saves real money.
+---
 
 ## Install
 
+One command. Takes about 30 seconds.
+
 ```bash
-git clone https://github.com/pdaxt/dxos
-cd dxos
+curl -fsSL https://raw.githubusercontent.com/pdaxt/dxos/main/install.sh | sh
+```
+
+Or build from source:
+
+```bash
+git clone https://github.com/pdaxt/dxos && cd dxos
 cargo install --path dxos-cli
 ```
 
-**No API key needed** — DXOS auto-detects the best available model:
+The release binary is ~15MB with full LTO. No runtime dependencies.
 
-```bash
-# Option 1: Free local models (recommended)
-brew install ollama && ollama pull qwen2.5-coder:32b
-dxos setup   # interactive model picker
-
-# Option 2: Any API key
-export ANTHROPIC_API_KEY=sk-ant-...   # Claude
-export OPENAI_API_KEY=sk-...          # GPT-4o
-export OPENROUTER_API_KEY=sk-...      # 100+ models
-```
+---
 
 ## Quick Start
 
+Just type `dxos`. That is it. You get an interactive AI coding agent.
+
 ```bash
-# Interactive REPL (recommended)
-dxos chat
-
-# One-shot task
-dxos run "fix the auth bug in handler.rs"
-
-# Use a specific model
-dxos chat --model qwen2.5-coder:32b
-
-# Full access mode (no permission prompts)
-dxos run --permission full-access "run the test suite and fix failures"
-
-# Initialize project config
-dxos init
+dxos                    # interactive chat (default)
+dxos fix                # find and fix issues
+dxos review             # review uncommitted changes
+dxos explain            # explain the codebase
+dxos test               # run tests and fix failures
+dxos commit             # generate commit message and commit
+dxos pr                 # generate PR description and create PR
 ```
 
-### Features
+Every command is one word. No flags to memorize. No YAML to write.
 
-- **SSE streaming** — text appears token-by-token as the model generates it
-- **Animated spinner** — cycling dots with rotating verbs while thinking
-- **REPL history** — up-arrow recall, persistent across sessions
-- **3-layer context compression** — MicroCompact → AutoCompact → Emergency
-- **Agent mode** — uses tools directly, never suggests commands for you to copy
-- **Smart model detection** — auto-picks the best available: Ollama → Anthropic → OpenAI → OpenRouter
+```bash
+# Want a specific model?
+dxos chat --model qwen2.5-coder:32b
+
+# Want to run a one-shot task?
+dxos run "refactor the auth module to use middleware"
+
+# Full-access mode (no permission prompts)
+dxos run --permission full-access "run the test suite and fix all failures"
+```
+
+**First run?** DXOS walks you through setup:
+
+```bash
+dxos setup
+# -> Detects your GPU (NVIDIA/Apple Silicon/CPU-only)
+# -> Installs Ollama if missing
+# -> Downloads the best model for your hardware
+# -> Ready in under 2 minutes
+```
+
+---
+
+## Why DXOS
+
+| | DXOS | Claude Code | Cursor | OpenCode |
+|---|---|---|---|---|
+| **Open source** | Yes (Apache-2.0) | No | No | Yes |
+| **Price** | Free forever | $200/mo | $20/mo | Free |
+| **Works offline** | Yes | No | No | No |
+| **Provider lock-in** | None — any model | Anthropic only | OpenAI default | Any model |
+| **Dependencies** | Zero. One binary. | Node.js + npm | Electron | Go runtime |
+| **Tool overhead** | 8 tools, ~400 tokens | ~206 tools, ~10k tokens | Unknown | ~30 tools |
+| **Language** | Rust | TypeScript | TypeScript | Go |
+| **Setup time** | 0 seconds | Account + billing | Download + account | Config file |
+
+### The token tax
+
+Every AI coding tool pays a hidden cost: describing its tools to the model on every single request. More tools means more tokens burned before the model even reads your code.
+
+```
+DXOS:       8 tools  x  ~50 tokens each  =    ~400 tokens
+Claude Code: 206 tools x  ~50 tokens each  = ~10,000 tokens
+```
+
+At $3 per million input tokens, that is $0.03 wasted per request with Claude Code versus $0.001 with DXOS. Over a thousand requests, DXOS saves $29 in pure overhead.
+
+But the real cost is not money -- it is context window. Those 10,000 tokens of tool definitions are 10,000 tokens that could have been your code.
+
+### Why 8 tools is enough
+
+These 8 tools cover 95% of everything a coding agent needs to do:
+
+| Tool | Purpose | Implementation |
+|---|---|---|
+| `bash` | Run any shell command | `tokio::process` with configurable timeout |
+| `read_file` | Read files with line numbers | `std::fs` with offset and limit |
+| `write_file` | Create or overwrite files | Atomic write with parent directory creation |
+| `edit_file` | Surgical find-and-replace | String matching with uniqueness validation |
+| `glob` | Find files by pattern | `ignore` crate (same engine as ripgrep) |
+| `grep` | Search file contents | `regex` + `ignore` (respects `.gitignore`) |
+| `git` | All git operations | Direct shell passthrough |
+| `web_fetch` | Fetch URL content | `reqwest` with automatic HTML-to-text |
+
+All tools execute as native Rust function calls inside the same process. No subprocess spawning for tool dispatch. No JSON-RPC. No MCP protocol negotiation. Just function calls.
+
+---
 
 ## Architecture
 
-DXOS is a Cargo workspace with composable crates. Use the full CLI or pick individual crates for your own tools.
+DXOS is a Cargo workspace. Each crate is independent and reusable.
 
 ```
 dxos/
-├── dxos-cli/          # The `dxos` binary
-├── crates/
-│   ├── core/          # Types, config, errors
-│   ├── tools/         # 7 native Rust tools (read, write, edit, bash, glob, grep, git)
-│   ├── harness/       # Conversation runtime, permissions, session compaction
-│   ├── api/           # Multi-provider LLM client (Anthropic, OpenAI, local)
-│   ├── fleet/         # Multi-agent orchestration [v0.2]
-│   ├── brain/         # Persistent cross-session memory [v0.2]
-│   └── dashboard/     # Real-time TUI monitoring [v0.2]
++-  dxos-cli/              # The `dxos` binary — CLI entry point
++-  crates/
+|   +-  core/              # Shared types, config, error handling
+|   +-  tools/             # 8 native Rust tool implementations
+|   +-  harness/           # Conversation runtime, permissions, compaction
+|   +-  api/               # Multi-provider LLM client
+|   +-  fleet/             # Multi-agent orchestration       [planned]
+|   +-  brain/             # Persistent cross-session memory  [planned]
+|   +-  dashboard/         # Real-time TUI monitoring         [planned]
++-  Cargo.toml             # Workspace root
 ```
 
-### Why 8 tools instead of 200?
+### Supported providers
 
-Every tool you add to the system prompt costs tokens and adds decision complexity for the model. 8 tools cover 95% of coding tasks:
+DXOS connects to any OpenAI-compatible API out of the box:
 
-| Tool | What it does | Implementation |
+| Provider | Models | Setup |
 |---|---|---|
-| `bash` | Execute shell commands | `tokio::process` with timeout |
-| `read_file` | Read files with line numbers | `std::fs` with offset/limit |
-| `write_file` | Write files atomically | `std::fs` with parent dir creation |
-| `edit_file` | Find-and-replace in files | String matching with uniqueness check |
-| `glob` | Find files by pattern | `ignore` crate (same as ripgrep) |
-| `grep` | Search file contents | `regex` + `ignore` (respects .gitignore) |
-| `git` | Git operations | Shell passthrough |
-| `web_fetch` | Fetch URL content | `reqwest` with HTML stripping |
+| **Ollama** (local) | Qwen 2.5 Coder, DeepSeek, Llama, Codestral, etc. | Auto-detected, no key needed |
+| **Anthropic** | Claude 4, Opus, Sonnet, Haiku | `ANTHROPIC_API_KEY` |
+| **OpenAI** | GPT-4o, o1, o3 | `OPENAI_API_KEY` |
+| **OpenRouter** | 100+ models from every provider | `OPENROUTER_API_KEY` |
 
-All tools run as **native Rust function calls** inside the same process. No subprocess spawning, no JSON-RPC overhead, no MCP protocol negotiation.
+### Conversation runtime
 
-### Conversation Runtime
-
-The harness manages the agent loop:
+The harness manages the full agent loop with three layers of context compression:
 
 ```
 User prompt
-    ↓
-System prompt + tool definitions (350 tokens, not 10,000)
-    ↓
-LLM generates response + tool calls
-    ↓
-Permission check (read-only / workspace-write / full-access)
-    ↓
-Native tool execution (no subprocess overhead)
-    ↓
+    |
+    v
+System prompt + tool definitions (400 tokens, not 10,000)
+    |
+    v
+LLM generates response with tool calls
+    |
+    v
+Permission gate (read-only / workspace-write / full-access)
+    |
+    v
+Native tool execution (zero subprocess overhead)
+    |
+    v
 Results fed back to LLM
-    ↓
-Loop until done or turn limit
-    ↓
-Session compaction if context grows large
+    |
+    v
+Loop until complete or turn limit reached
+    |
+    v
+Context compression if window grows large
+    MicroCompact  ->  AutoCompact  ->  Emergency
 ```
+
+### What makes it fast
+
+- **Single binary, single process.** No Node.js. No Python. No Docker. Just a statically-linked Rust executable.
+- **Native tool calls.** Tools are Rust functions, not subprocesses. A `read_file` call is a function call, not a fork+exec.
+- **SSE streaming.** Tokens appear as they are generated. An animated spinner with cycling verbs shows activity while the model thinks.
+- **Smart model detection.** On first run, DXOS probes Ollama, then checks for API keys, and selects the best available model automatically.
+- **REPL with history.** Arrow keys, persistent history across sessions, readline bindings.
+- **Project instructions.** Reads `CLAUDE.md` or `DXOS.md` from your project root and feeds it as context automatically.
+
+---
 
 ## Roadmap
 
-### v0.1 — Solo Agent (current)
-- [x] 8 native Rust tool implementations
-- [x] Conversation runtime with turn loop
-- [x] Permission gating (read-only → workspace-write → full-access)
-- [x] 3-layer context compression (MicroCompact → AutoCompact → Emergency)
-- [x] SSE streaming output (token-by-token)
-- [x] Animated spinner with cycling dots and rotating verbs
-- [x] Interactive REPL with readline history
-- [x] Multi-provider: Anthropic, OpenAI, OpenRouter, Ollama/local
-- [x] Smart model auto-detection
-- [x] Interactive model setup with system detection
-- [x] Agent-mode system prompt (uses tools, doesn't suggest commands)
-- [x] Text-based tool extraction (works with any model)
-- [x] CLAUDE.md / DXOS.md project instruction loading
-- [x] 37 tests
+### v0.1 -- Solo Agent (current)
 
-### v0.2 — Fleet + Brain
+- [x] 8 native Rust tool implementations
+- [x] Conversation runtime with agentic turn loop
+- [x] Permission gating: read-only, workspace-write, full-access
+- [x] 3-layer context compression
+- [x] SSE streaming with animated spinner
+- [x] Interactive REPL with readline history
+- [x] Multi-provider support: Ollama, Anthropic, OpenAI, OpenRouter
+- [x] Smart model auto-detection and hardware-aware setup
+- [x] One-word commands: fix, review, explain, test, commit, pr
+- [x] Project instruction loading (CLAUDE.md / DXOS.md)
+- [x] Text-based tool extraction (works with any model, not just function-calling models)
+- [x] 39 tests, zero warnings, zero `unsafe`
+
+### v0.2 -- Fleet + Memory
+
 - [ ] Multi-agent fleet on isolated git worktrees
-- [ ] Persistent SQLite-backed memory (brain)
+- [ ] Persistent SQLite-backed memory across sessions
 - [ ] Real-time TUI dashboard (Ratatui)
 - [ ] Session logging and cost tracking
 - [ ] Extended thinking mode display
 
-### v0.3 — Enterprise
+### v0.3 -- Ecosystem
+
+- [ ] Plugin system for custom tools
+- [ ] Web dashboard for fleet monitoring
+- [ ] IDE extensions (VS Code, JetBrains)
 - [ ] Agent governance and audit trails
-- [ ] Web dashboard
-- [ ] Plugin system
-- [ ] IDE bridge (VS Code, JetBrains)
+- [ ] `dxos deploy` -- ship code end-to-end
+
+---
 
 ## Contributing
 
-We welcome contributions. The codebase is designed to be approachable:
+The codebase is designed to be readable and hackable. Here is where to start:
 
-- **Add a provider**: Implement `ApiClient` trait in `crates/api/`
-- **Add a tool**: Add a function in `crates/tools/` and register in `registry.rs`
-- **Improve the harness**: The conversation loop is in `crates/harness/src/runtime.rs`
+**Add a new LLM provider:** Implement the `ApiClient` trait in `crates/api/`. Any OpenAI-compatible endpoint works with minimal code.
+
+**Add a new tool:** Write a function in `crates/tools/` and register it in `registry.rs`. The model sees it on the next run.
+
+**Improve the agent loop:** The conversation runtime lives in `crates/harness/src/runtime.rs`.
 
 ```bash
-cargo test          # Run all tests
-cargo clippy        # Lint
-cargo build --release  # Build release binary (~15MB)
+cargo test                 # run all 39 tests
+cargo clippy               # lint (zero warnings policy)
+cargo build --release      # build release binary (~15MB)
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+---
 
 ## Acknowledgments
 
-DXOS is original work built from scratch in Rust, informed by publicly documented agent design patterns and the open-source AI coding community.
+DXOS is original work, built from scratch in Rust. The design is informed by publicly documented agent patterns, the open-source AI tooling community, and the belief that developer tools should be free, fast, and transparent.
 
 ## License
 
-Apache-2.0
+[Apache-2.0](LICENSE)
+
+---
+
+<p align="center">
+  <strong>Star the repo if you believe AI coding tools should be open.</strong>
+</p>

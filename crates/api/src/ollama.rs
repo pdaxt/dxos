@@ -23,8 +23,8 @@ fn extract_tool_call_from_text(text: &str) -> Option<AssistantEvent> {
             // Validate it's a known tool name
             let known_tools = [
                 "read_file", "write_file", "edit_file", "bash",
-                "glob", "grep", "git",
-                "Read", "Write", "Edit", "Glob", "Grep",
+                "glob", "grep", "git", "web_fetch", "repo_map",
+                "Read", "Write", "Edit", "Glob", "Grep", "WebFetch",
             ];
             if known_tools.iter().any(|t| *t == name) {
                 return Some(AssistantEvent::ToolUse {

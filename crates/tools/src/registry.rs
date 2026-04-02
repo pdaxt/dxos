@@ -21,7 +21,7 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
-    /// Build the default lean tool set — 7 native tools.
+    /// Build the default lean tool set — 9 native tools.
     #[must_use]
     pub fn default_cli() -> Self {
         Self {
@@ -159,6 +159,19 @@ fn builtin_tools() -> Vec<ToolSpec> {
                     "max_length": { "type": "integer", "description": "Max characters to return (default: 50000)" }
                 },
                 "required": ["url"]
+            }),
+            permission: PermissionLevel::ReadOnly,
+        },
+        ToolSpec {
+            name: "repo_map",
+            description: "Generate a condensed map of definitions (functions, structs, classes, etc.) across source files in a directory. Uses tree-sitter for Rust and regex for other languages.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Directory to scan (defaults to cwd)" },
+                    "max_files": { "type": "integer", "description": "Max files to process (default: 500)" }
+                },
+                "required": []
             }),
             permission: PermissionLevel::ReadOnly,
         },

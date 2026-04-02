@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::Path;
 
     fn test_dir() -> tempfile::TempDir {
         let dir = tempfile::tempdir().expect("create temp dir");
@@ -305,5 +304,127 @@ mod tests {
         let dir = test_dir();
         let result = crate::execute_tool("nonexistent", "{}", dir.path());
         assert!(result.is_err());
+    }
+
+    // ── repo_map tests ──
+
+    #[test]
+    fn repo_map_extracts_rust_functions() {
+        let dir = test_dir();
+        let input = crate::RepoMapInput {
+            path: None,
+            max_files: None,
+        };
+        let output = crate::repo_map(input, dir.path()).expect("repo_map");
+        // hello.rs has fn main, lib.rs has fn add
+        assert!(output.map.contains("fn main()"));
+        assert!(output.map.contains("fn add()"));
+        assert!(output.definitions_found >= 2);
+    }
+
+    #[test]
+    fn repo_map_extracts_rust_structs_and_enums() {
+        let dir = test_dir();
+        fs::write(
+            dir.path().join("types.rs"),
+            "pub struct Config {\n    pub name: String,\n}\n\npub enum Mode {\n    Fast,\n    Slow,\n}\n",
+        )
+        .expect("write types.rs");
+
+        let input = crate::RepoMapInput {
+            path: None,
+            max_files: None,
+        };
+        let output = crate::repo_map(input, dir.path()).expect("repo_map");
+        assert!(output.map.contains("struct Config()"));
+        assert!(output.map.contains("enum Mode()"));
+    }
+
+    #[test]
+    fn repo_map_extracts_rust_impl_and_trait() {
+        let dir = test_dir();
+        fs::write(
+            dir.path().join("traits.rs"),
+            "pub trait Runnable {\n    fn run(&self);\n}\n\nstruct App;\n\nimpl Runnable for App {\n    fn run(&self) {}\n}\n",
+        )
+        .expect("write traits.rs");
+
+        let input = crate::RepoMapInput {
+            path: None,
+            max_files: None,
+        };
+        let output = crate::repo_map(input, dir.path()).expect("repo_map");
+        assert!(output.map.contains("trait Runnable()"));
+        assert!(output.map.contains("impl Runnable for App()"));
+    }
+
+    #[test]
+    fn repo_map_handles_python_files() {
+        let dir = test_dir();
+        fs::write(
+            dir.path().join("app.py"),
+            "class Server:\n    def start(self):\n        pass\n\ndef main():\n    pass\n",
+        )
+        .expect("write app.py");
+
+        let input = crate::RepoMapInput {
+            path: None,
+            max_files: None,
+        };
+        let output = crate::repo_map(input, dir.path()).expect("repo_map");
+        assert!(output.map.contains("class Server()"));
+        assert!(output.map.contains("def main()"));
+    }
+
+    #[test]
+    fn repo_map_handles_typescript_files() {
+        let dir = test_dir();
+        fs::write(
+            dir.path().join("index.ts"),
+            "export function fetchData() {\n  return null;\n}\n\nexport interface Config {\n  url: string;\n}\n\nexport class App {\n}\n",
+        )
+        .expect("write index.ts");
+
+        let input = crate::RepoMapInput {
+            path: None,
+            max_files: None,
+        };
+        let output = crate::repo_map(input, dir.path()).expect("repo_map");
+        assert!(output.map.contains("fn fetchData()"));
+        assert!(output.map.contains("interface Config()"));
+        assert!(output.map.contains("class App()"));
+    }
+
+    #[test]
+    fn repo_map_respects_max_files() {
+        let dir = test_dir();
+        let input = crate::RepoMapInput {
+            path: None,
+            max_files: Some(1),
+        };
+        let output = crate::repo_map(input, dir.path()).expect("repo_map");
+        assert!(output.files_scanned <= 1);
+    }
+
+    #[test]
+    fn repo_map_shows_line_numbers() {
+        let dir = test_dir();
+        let input = crate::RepoMapInput {
+            path: None,
+            max_files: None,
+        };
+        let output = crate::repo_map(input, dir.path()).expect("repo_map");
+        // Line numbers should appear in brackets
+        assert!(output.map.contains("[1]"));
+    }
+
+    #[test]
+    fn repo_map_via_execute_tool() {
+        let dir = test_dir();
+        let input = r#"{}"#;
+        let result = crate::execute_tool("repo_map", input, dir.path());
+        assert!(result.is_ok());
+        let json: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert!(json["definitions_found"].as_u64().unwrap() >= 2);
     }
 }

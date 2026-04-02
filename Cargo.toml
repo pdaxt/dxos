@@ -63,6 +63,9 @@ rustyline = "15"
 # Git
 git2 = "0.19"
 
+# Tree-sitter
+tree-sitter = "0.24"
+
 [profile.release]
 opt-level = 3
 lto = true
